@@ -23,3 +23,8 @@ Currently, there is no information about the quality of the connection between t
 ![Overview](images/network_overview.png)
 
 ![Node detail](images/nodes_detail.png)
+
+
+---
+
+Thanks to [dmulcahey](https://github.com/dmulcahey) for [the original card for ZHA](https://github.com/dmulcahey/zha-network-visualization-card).
