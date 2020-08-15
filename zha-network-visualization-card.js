@@ -8,9 +8,7 @@ function loadCSS(url) {
   document.head.appendChild(link);
 }
 
-loadCSS("https://unpkg.com/vis-network@8.1.0/dist/dist/vis-network.min.css");
-
-class ZHANetworkVisualizationCard extends HTMLElement {
+class OZWNetworkVisualizationCard extends HTMLElement {
   constructor() {
     super();
     this.bufferTime = 1000 * 60 * 5; //5 minutes
@@ -55,13 +53,12 @@ class ZHANetworkVisualizationCard extends HTMLElement {
     // assemble html
     const card = document.createElement("ha-card");
     const content = document.createElement("div");
-    this.timelabel = document.createElement("label");
     this.filterinput = document.createElement("input");
 
-    card.appendChild(this.timelabel);
     card.appendChild(this.filterinput);
     card.appendChild(content);
 
+    this.device_registry = {};
     this.nodes = [];
     this.network = new vis.Network(content, {}, this.networkOptions);
 
@@ -90,15 +87,6 @@ class ZHANetworkVisualizationCard extends HTMLElement {
 
   _updateContent(data) {
     this._updateDevices(data.devices);
-    this._updateTimestamp(data.time);
-  }
-
-  _updateTimestamp(timestamp) {
-    var date = new Date(timestamp * 1000);
-    var iso = date
-      .toISOString()
-      .match(/(\d{4}\-\d{2}\-\d{2})T(\d{2}:\d{2}:\d{2})/);
-    this.timelabel.innerHTML = iso[1] + " " + iso[2];
   }
 
   _updateDevices(devices) {
@@ -107,28 +95,23 @@ class ZHANetworkVisualizationCard extends HTMLElement {
 
     devices.map((device) => {
       this.nodes.push({
-        id: device["ieee"],
+        id: device.node_id,
         label: this._buildLabel(device),
         shape: this._getShape(device),
         mass: this._getMass(device),
       });
-      if (device.neighbours && device.neighbours.length > 0) {
-        device.neighbours.map((neighbour) => {
+      if (device.neighbors && device.neighbors.length > 0) {
+        device.neighbors.map((neighbor) => {
           var idx = edges.findIndex(function (e) {
-            return device.ieee === e.to && neighbour.ieee === e.from;
+            return device.node_id === e.to && neighbor === e.from;
           });
           if (idx === -1) {
             edges.push({
-              from: device["ieee"],
-              to: neighbour["ieee"],
-              label: neighbour["lqi"] + "",
-              color: this._getLQI(neighbour["lqi"]),
+              from: device.node_id,
+              to: neighbor,
+              label: "",
+              color: this._getLQI(255), // TODO: can we get some sort of LQI?
             });
-          } else {
-            edges[idx].color = this._getLQI(
-              (parseInt(edges[idx].label) + neighbour.lqi) / 2
-            );
-            edges[idx].label += "/" + neighbour["lqi"];
           }
         });
       }
@@ -149,9 +132,9 @@ class ZHANetworkVisualizationCard extends HTMLElement {
   }
 
   _getMass(device) {
-    if (device.device_type === "Coordinator") {
+    if (device.node_basic_string === "Static Controller") {
       return 2;
-    } else if (device.device_type === "Router") {
+    } else if (device.node_basic_string === "Routing Slave") {
       return 4;
     } else {
       return 5;
@@ -159,9 +142,9 @@ class ZHANetworkVisualizationCard extends HTMLElement {
   }
 
   _getShape(device) {
-    if (device.device_type === "Coordinator") {
+    if (device.node_basic_string === "Static Controller") {
       return "box";
-    } else if (device.device_type === "Router") {
+    } else if (device.node_basic_string === "Routing Slave") {
       return "ellipse";
     } else {
       return "circle";
@@ -169,26 +152,13 @@ class ZHANetworkVisualizationCard extends HTMLElement {
   }
 
   _buildLabel(device) {
-    var regDevices = this.deviceRegistry.filter((regDev) => {
-      return regDev.ieee === device.ieee;
-    });
+    var regDevice = this.device_registry[device.node_id];
+    console.log(regDevice);
 
-    var res =
-      regDevices.length > 0
-        ? "<b>" + regDevices[0].user_given_name + "</b>" + "\n"
-        : "";
-    res += "<b>IEEE: </b>" + device.ieee;
-    res += "\n<b>Device Type: </b>" + device.device_type.replace("_", " ");
-    if (device.nwk != null) {
-      res += "\n<b>NWK: </b>" + device.nwk;
-    }
-    if (device.manufacturer != null && device.model != null) {
-      res += "\n<b>Device: </b>" + device.manufacturer + " " + device.model;
-    } else {
-      res += "\n<b>Device is not in <i>'zigbee.db'</i></b>";
-    }
-    if (device.offline) {
-      res += "\n<b>Device is <i>Offline</i></b>";
+    var res = regDevice ? "<b>" + regDevice.name + "</b>" + "\n" : "";
+    res += "<b>Node: </b>" + device.node_id;
+    if (device.is_routing) {
+      res += "\n<b>Device is <i>Routing</i></b>";
     }
     return res;
   }
@@ -200,20 +170,63 @@ class ZHANetworkVisualizationCard extends HTMLElement {
     ) {
       return;
     }
+    let nodes = [];
+
     hass
       .callWS({
-        type: "zha/devices",
+        type: "config/device_registry/list",
       })
-      .then((devices) => {
-        this.deviceRegistry = devices;
+      .then((device_registry) => {
+        let node_set = new Set();
+        let all_requests_sent = false;
+        let debounced = false;
 
-        hass
-          .callWS({
-            type: "zha_map/devices",
-          })
-          .then((zhaMapData) => {
-            this._updateContent(zhaMapData);
-          });
+        const checkAndUpdateContent = () => {
+          if (
+            !debounced &&
+            (!all_requests_sent || nodes.length < node_set.size)
+          ) {
+            return;
+          }
+          console.log("DONE!!!");
+          this._updateContent({ devices: nodes });
+        };
+
+        device_registry.forEach((device) => {
+          const ozwIdentifier = device.identifiers.find(
+            (identifier) => identifier[0] === "ozw"
+          );
+          if (!ozwIdentifier) {
+            return;
+          }
+          const identifiers = ozwIdentifier[1].split(".");
+          const ozw_instance = identifiers[0];
+          const node_id = identifiers[1];
+
+          if (node_set.has(node_id)) {
+            return;
+          }
+          node_set.add(node_id);
+          this.device_registry[node_id] = device;
+
+          hass
+            .callWS({
+              type: "ozw/node_status",
+              ozw_instance: ozw_instance,
+              node_id: node_id,
+            })
+            .then((node) => {
+              nodes.push(node);
+              checkAndUpdateContent();
+            });
+        });
+
+        setTimeout(() => {
+          debounced = true;
+          checkAndUpdateContent();
+        }, 1000);
+        all_requests_sent = true;
+        checkAndUpdateContent();
       });
 
     this.lastUpdated = Date.now();
@@ -225,6 +238,6 @@ class ZHANetworkVisualizationCard extends HTMLElement {
 }
 
 customElements.define(
-  "zha-network-visualization-card",
-  ZHANetworkVisualizationCard
+  "ozw-network-visualization-card",
+  OZWNetworkVisualizationCard
 );
