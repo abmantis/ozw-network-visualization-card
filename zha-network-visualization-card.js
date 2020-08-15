@@ -168,16 +168,16 @@ class OZWNetworkVisualizationCard extends HTMLElement {
       .then((device_registry) => {
         let node_set = new Set();
         let all_requests_sent = false;
-        let debounced = false;
+        let nodes_received = 0;
+        let forceUpdate = false;
 
         const checkAndUpdateContent = () => {
           if (
-            !debounced &&
-            (!all_requests_sent || nodes.length < node_set.size)
+            !forceUpdate &&
+            (!all_requests_sent || nodes_received < node_set.size)
           ) {
             return;
           }
-          console.log("DONE!!!");
           this._updateContent({ devices: nodes });
         };
 
@@ -206,14 +206,22 @@ class OZWNetworkVisualizationCard extends HTMLElement {
             })
             .then((node) => {
               nodes.push(node);
+              ++nodes_received;
               checkAndUpdateContent();
+            })
+            .catch((error) => {
+              console.warn("Failed to get node status: ", error.message);
+              ++nodes_received;
             });
         });
 
         setTimeout(() => {
-          debounced = true;
+          if (nodes_received === node_set.size) {
+            return;
+          }
+          forceUpdate = true;
           checkAndUpdateContent();
-        }, 1000);
+        }, 5000);
         all_requests_sent = true;
         checkAndUpdateContent();
       });
