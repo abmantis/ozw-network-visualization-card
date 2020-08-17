@@ -1,4 +1,4 @@
-# ozw-network-visualization-card
+# OZW Network Visualization Card
 
 Lovelace custom card for visualizing the ZWave network with the OpenZWave (beta) integration.
 
