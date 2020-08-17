@@ -2,5 +2,6 @@
     "name": "OZW Network Visualization Card",
     "content_in_root": true,
     "filename": "ozw-network-visualization-card.js",
-    "homeassistant": "0.114.0"
+    "homeassistant": "0.114.0",
+    "render_readme": true
 }
