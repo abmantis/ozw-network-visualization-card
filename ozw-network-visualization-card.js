@@ -149,7 +149,7 @@ class OZWNetworkVisualizationCard extends HTMLElement {
   _buildLabel(device) {
     var regDevice = this.device_registry[device.node_id];
     //Add user's device name for display
-    var res = regDevice ? "<b>" + regDevice.name_by_user || regDevice.name + "</b>\n" : "";
+    var res = regDevice ? "<b>" + (regDevice.name_by_user || regDevice.name) + "</b>\n" : "";
     res += "<b>Model: </b>" + regDevice.model + "\n";
     res += "<b>Node: </b>" + device.node_id + "\n";
     res += (device.is_routing ? "Routing" : "Not routing") + " | ";
