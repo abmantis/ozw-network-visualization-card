@@ -129,13 +129,20 @@ class OZWNetworkVisualizationCard extends HTMLElement {
     }
   }
 
+  //Set different shapes for different device types
   _getShape(device) {
     if (device.node_basic_string === "Static Controller") {
+      return "triangle";
+    } else if (device.node_generic_string === "Binary Switch") {
       return "box";
-    } else if (device.node_basic_string === "Routing Slave") {
+    } else if (device.node_generic_string === "Multilevel Switch") {
       return "ellipse";
-    } else {
+    } else if (device.node_generic_string === "Multilevel Sensor") {
       return "circle";
+    } else if (device.node_generic_string === "Binary Sensor") {
+      return "circle";
+    } else {
+      return "database";
     }
   }
 
