@@ -86,6 +86,12 @@ class OZWNetworkVisualizationCard extends HTMLElement {
         label: this._buildLabel(device),
         shape: this._getShape(device),
         mass: this._getMass(device),
+        color: {
+          highlight: {
+            border: "#0048ff",
+            background: "#00fbff",
+          },
+        },
       });
       if (device.neighbors && device.neighbors.length > 0) {
         device.neighbors.map((neighbor) => {
@@ -142,13 +148,15 @@ class OZWNetworkVisualizationCard extends HTMLElement {
   _buildLabel(device) {
     var regDevice = this.device_registry[device.node_id];
     //Add user's device name for display
-    var res = regDevice ? "<b>" + (regDevice.name_by_user || regDevice.name) + "</b>\n" : "";
+    var res = regDevice
+      ? "<b>" + (regDevice.name_by_user || regDevice.name) + "</b>\n"
+      : "";
     res += "<b>Model: </b>" + regDevice.model + "\n";
     res += "<b>Node: </b>" + device.node_id + "\n";
     res += (device.is_routing ? "Routing" : "Not routing") + " | ";
     res += (device.is_awake ? "Awake" : "Sleeping") + " | ";
     res += (device.is_beaming ? "Beaming" : "Not beaming") + "";
-    
+
     if (device.is_failed) {
       res += "\n<b>DEVICE FAILED</b>";
     }
