@@ -53,9 +53,19 @@ class OZWNetworkVisualizationCard extends HTMLElement {
     // assemble html
     const card = document.createElement("ha-card");
     const content = document.createElement("div");
-    this.filterinput = document.createElement("input");
 
-    card.appendChild(this.filterinput);
+    this.filterdiv = document.createElement("div");
+    this.filterdiv.style = "display: flex; align-items: center";
+
+    this.filterlable = document.createElement("div");
+    this.filterlable.innerHTML = "Search: ";
+
+    this.filterinput = document.createElement("input");
+    this.filterinput.placeholder = "Name, Node ID, Model, ...";
+
+    this.filterdiv.appendChild(this.filterlable);
+    this.filterdiv.appendChild(this.filterinput);
+    card.appendChild(this.filterdiv);
     card.appendChild(content);
 
     this.device_registry = {};
