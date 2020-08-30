@@ -109,7 +109,8 @@ class OZWNetworkVisualizationCard extends HTMLElement {
 
   _getLQI(lqi) {
     if (lqi > 192) {
-      return { color: "#17ab00", highlight: "#17ab00" };
+      //darken unselected edges, and brightly mark edges of the selected node (or edge)
+      return { color: "#17ab00", highlight: "yellow" };
     } else if (lqi > 128) {
       return { color: "#e6b402", highlight: "#e6b402" };
     } else if (lqi > 80) {
@@ -128,24 +129,33 @@ class OZWNetworkVisualizationCard extends HTMLElement {
     }
   }
 
+  //Set different shapes for different device types
   _getShape(device) {
     if (device.node_basic_string === "Static Controller") {
+      return "triangle";
+    } else if (device.node_generic_string === "Binary Switch") {
       return "box";
-    } else if (device.node_basic_string === "Routing Slave") {
+    } else if (device.node_generic_string === "Multilevel Switch") {
       return "ellipse";
-    } else {
+    } else if (device.node_generic_string === "Multilevel Sensor") {
       return "circle";
+    } else if (device.node_generic_string === "Binary Sensor") {
+      return "circle";
+    } else {
+      return "database";
     }
   }
 
   _buildLabel(device) {
     var regDevice = this.device_registry[device.node_id];
-
-    var res = regDevice ? "<b>" + regDevice.name + "</b>\n" : "";
+    //Add user's device name for display
+    var res = regDevice ? "<b>" + (regDevice.name_by_user || regDevice.name) + "</b>\n" : "";
+    res += "<b>Model: </b>" + regDevice.model + "\n";
     res += "<b>Node: </b>" + device.node_id + "\n";
     res += (device.is_routing ? "Routing" : "Not routing") + " | ";
     res += (device.is_awake ? "Awake" : "Sleeping") + " | ";
     res += (device.is_beaming ? "Beaming" : "Not beaming") + "";
+    
     if (device.is_failed) {
       res += "\n<b>DEVICE FAILED</b>";
     }
