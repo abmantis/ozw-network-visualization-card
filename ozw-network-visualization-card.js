@@ -173,6 +173,43 @@ class OZWNetworkVisualizationCard extends HTMLElement {
     return res;
   }
 
+  _fetchInstanceData(hass, instance) {
+    hass
+      .callWS({
+        type: "ozw/get_nodes",
+        ozw_instance: instance,
+      })
+      .then((nodes) => {
+        this._updateContent({ devices: nodes });
+      })
+      .catch((error) => {
+        console.warn("Failed to get node status: ", error.message);
+        ++nodes_received;
+      });
+  }
+
+  _updateDeviceRegistry(device_registry) {
+    let node_set = new Set();
+
+    device_registry.forEach((device) => {
+      const ozwIdentifier = device.identifiers.find(
+        (identifier) => identifier[0] === "ozw"
+      );
+      if (!ozwIdentifier) {
+        return;
+      }
+      const identifiers = ozwIdentifier[1].split(".");
+      const ozw_instance = identifiers[0];
+      const node_id = identifiers[1];
+
+      if (node_set.has(node_id)) {
+        return;
+      }
+      node_set.add(node_id);
+      this.device_registry[node_id] = device;
+    });
+  }
+
   set hass(hass) {
     if (
       this.lastUpdated &&
@@ -187,64 +224,20 @@ class OZWNetworkVisualizationCard extends HTMLElement {
         type: "config/device_registry/list",
       })
       .then((device_registry) => {
-        let node_set = new Set();
-        let all_requests_sent = false;
-        let nodes_received = 0;
-        let forceUpdate = false;
+        this._updateDeviceRegistry(device_registry);
 
-        const checkAndUpdateContent = () => {
-          if (
-            !forceUpdate &&
-            (!all_requests_sent || nodes_received < node_set.size)
-          ) {
-            return;
-          }
-          this._updateContent({ devices: nodes });
-        };
-
-        device_registry.forEach((device) => {
-          const ozwIdentifier = device.identifiers.find(
-            (identifier) => identifier[0] === "ozw"
-          );
-          if (!ozwIdentifier) {
-            return;
-          }
-          const identifiers = ozwIdentifier[1].split(".");
-          const ozw_instance = identifiers[0];
-          const node_id = identifiers[1];
-
-          if (node_set.has(node_id)) {
-            return;
-          }
-          node_set.add(node_id);
-          this.device_registry[node_id] = device;
-
-          hass
-            .callWS({
-              type: "ozw/node_status",
-              ozw_instance: ozw_instance,
-              node_id: node_id,
-            })
-            .then((node) => {
-              nodes.push(node);
-              ++nodes_received;
-              checkAndUpdateContent();
-            })
-            .catch((error) => {
-              console.warn("Failed to get node status: ", error.message);
-              ++nodes_received;
+        hass
+          .callWS({
+            type: "ozw/get_instances",
+          })
+          .then((instances) => {
+            instances.forEach((instance) => {
+              this._fetchInstanceData(hass, instance.ozw_instance);
             });
-        });
-
-        setTimeout(() => {
-          if (nodes_received === node_set.size) {
-            return;
-          }
-          forceUpdate = true;
-          checkAndUpdateContent();
-        }, 5000);
-        all_requests_sent = true;
-        checkAndUpdateContent();
+          })
+          .catch((error) => {
+            console.warn("Failed to get instances: ", error.message);
+          });
       });
 
     this.lastUpdated = Date.now();
