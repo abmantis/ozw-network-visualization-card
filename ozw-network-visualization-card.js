@@ -156,13 +156,30 @@ class OZWNetworkVisualizationCard extends HTMLElement {
   }
 
   _buildLabel(device) {
-    var regDevice = this.device_registry[device.node_id];
-    //Add user's device name for display
+    var regDevice = this.device_registry[device.ozw_instance][device.node_id];
+    if (regDevice === undefined) {
+      return;
+    }
+
+    var avertage_rtt = Math.round(
+      (parseInt(device.statistics.average_request_rtt) +
+        parseInt(device.statistics.average_response_rtt)) /
+        2.0
+    );
+
     var res = regDevice
       ? "<b>" + (regDevice.name_by_user || regDevice.name) + "</b>\n"
       : "";
     res += "<b>Model: </b>" + regDevice.model + "\n";
     res += "<b>Node: </b>" + device.node_id + "\n";
+    res += "<b>RTT: </b>" + avertage_rtt + " | ";
+    res +=
+      "<b>Send Count: </b>" +
+      device.statistics.send_count +
+      " (" +
+      device.statistics.sent_failed +
+      " failed)" +
+      "\n";
     res += (device.is_routing ? "Routing" : "Not routing") + " | ";
     res += (device.is_awake ? "Awake" : "Sleeping") + " | ";
     res += (device.is_beaming ? "Beaming" : "Not beaming") + "";
@@ -173,18 +190,34 @@ class OZWNetworkVisualizationCard extends HTMLElement {
     return res;
   }
 
-  _fetchInstanceData(hass, instance) {
+  _fetchNodeStatistics(hass, node) {
+    return hass
+      .callWS({
+        type: "ozw/node_statistics",
+        ozw_instance: node.ozw_instance,
+        node_id: node.node_id,
+      })
+      .then((node_stat) => {
+        node.statistics = node_stat;
+      });
+  }
+
+  _fetchInstanceNodes(hass, instance) {
     hass
       .callWS({
         type: "ozw/get_nodes",
         ozw_instance: instance,
       })
       .then((nodes) => {
-        this._updateContent({ devices: nodes });
-      })
-      .catch((error) => {
-        console.warn("Failed to get node status: ", error.message);
-        ++nodes_received;
+        const stats_promises = [];
+        nodes.forEach((node) => {
+          stats_promises.push(this._fetchNodeStatistics(hass, node));
+        });
+
+        Promise.all(stats_promises).then((node_stats_list) => {
+          console.log(nodes);
+          this._updateContent({ devices: nodes });
+        });
       });
   }
 
@@ -202,11 +235,16 @@ class OZWNetworkVisualizationCard extends HTMLElement {
       const ozw_instance = identifiers[0];
       const node_id = identifiers[1];
 
-      if (node_set.has(node_id)) {
+      const instante_node_id = ozw_instance + "." + node_id;
+      if (node_set.has(instante_node_id)) {
         return;
       }
-      node_set.add(node_id);
-      this.device_registry[node_id] = device;
+      node_set.add(instante_node_id);
+
+      if (this.device_registry[ozw_instance] === undefined) {
+        this.device_registry[ozw_instance] = {};
+      }
+      this.device_registry[ozw_instance][node_id] = device;
     });
   }
 
@@ -232,7 +270,8 @@ class OZWNetworkVisualizationCard extends HTMLElement {
           })
           .then((instances) => {
             instances.forEach((instance) => {
-              this._fetchInstanceData(hass, instance.ozw_instance);
+              // TODO: fix multi instance. ATM the last instance will win.
+              this._fetchInstanceNodes(hass, instance.ozw_instance);
             });
           })
           .catch((error) => {
