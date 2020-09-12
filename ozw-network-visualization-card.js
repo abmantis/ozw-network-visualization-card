@@ -97,6 +97,7 @@ class OZWNetworkVisualizationCard extends HTMLElement {
         shape: this._getShape(device),
         mass: this._getMass(device),
         color: {
+          border: this._getBorderColor(device),
           highlight: {
             border: "#0048ff",
             background: "#00fbff",
@@ -121,6 +122,15 @@ class OZWNetworkVisualizationCard extends HTMLElement {
     });
 
     this.network.setData({ nodes: this.nodes, edges: edges });
+  }
+
+  _getBorderColor(device) {
+    var avertage_rtt = Math.round(
+      (parseInt(device.statistics.average_request_rtt) +
+        parseInt(device.statistics.average_response_rtt)) /
+        2.0
+    );
+    return avertage_rtt < 500 ? "#0048ff" : "#ff48ff";
   }
 
   _getLQI(lqi) {
