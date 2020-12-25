@@ -8,6 +8,9 @@ function loadCSS(url) {
   document.head.appendChild(link);
 }
 
+const ZWAVE_INTEGRATION = "ozw";
+//const ZWAVE_INTEGRATION = "zwave2mqtt"
+
 class OZWNetworkVisualizationCard extends HTMLElement {
   constructor() {
     super();
@@ -74,7 +77,7 @@ class OZWNetworkVisualizationCard extends HTMLElement {
 
     this.filterinput.oninput = function () {
       let filterednodes = this.nodes.filter((x) =>
-        x.label.toLowerCase().includes(this.filterinput.value.toLowerCase())
+        x.label.toLowerCase().match(this.filterinput.value.toLowerCase())
       );
       this.network.selectNodes(filterednodes.map((x) => x.id));
     }.bind(this);
@@ -90,22 +93,24 @@ class OZWNetworkVisualizationCard extends HTMLElement {
     this.nodes = [];
     var edges = [];
 
-    devices.map((device) => {
+    devices.forEach((device) => {
       this.nodes.push({
         id: device.node_id,
         label: this._buildLabel(device),
         shape: this._getShape(device),
         mass: this._getMass(device),
+        borderWidth: 3,
         color: {
           border: this._getBorderColor(device),
+          background: "#ffffff",
           highlight: {
-            border: "#0048ff",
+            border: this._getBorderColor(device),
             background: "#00fbff",
           },
         },
       });
       if (device.neighbors && device.neighbors.length > 0) {
-        device.neighbors.map((neighbor) => {
+        device.neighbors.forEach((neighbor) => {
           var idx = edges.findIndex(function (e) {
             return device.node_id === e.to && neighbor === e.from;
           });
@@ -114,7 +119,7 @@ class OZWNetworkVisualizationCard extends HTMLElement {
               from: device.node_id,
               to: neighbor,
               label: "",
-              color: this._getLQI(255), // TODO: can we get some sort of LQI?
+              color: { color: "#bfbfbf", highlight: "#00fbff" },
             });
           }
         });
@@ -130,19 +135,13 @@ class OZWNetworkVisualizationCard extends HTMLElement {
         parseInt(device.statistics.average_response_rtt)) /
         2.0
     );
-    return avertage_rtt < 500 ? "#0048ff" : "#ff48ff";
-  }
 
-  _getLQI(lqi) {
-    if (lqi > 192) {
-      //darken unselected edges, and brightly mark edges of the selected node (or edge)
-      return { color: "#17ab00", highlight: "yellow" };
-    } else if (lqi > 128) {
-      return { color: "#e6b402", highlight: "#e6b402" };
-    } else if (lqi > 80) {
-      return { color: "#fc4c4c", highlight: "#fc4c4c" };
+    if (avertage_rtt > 1000) {
+      return "#ab0000";
+    } else if (avertage_rtt > 500) {
+      return "#e6b402";
     }
-    return { color: "#bfbfbf", highlight: "#bfbfbf" };
+    return "#17ab00";
   }
 
   _getMass(device) {
@@ -166,21 +165,17 @@ class OZWNetworkVisualizationCard extends HTMLElement {
   }
 
   _buildLabel(device) {
-    var regDevice = this.device_registry[device.ozw_instance][device.node_id];
-    if (regDevice === undefined) {
-      return;
-    }
-
-    var avertage_rtt = Math.round(
+    const regDevice = this.device_registry[device.ozw_instance][device.node_id];
+    const name = regDevice ? regDevice.name_by_user || regDevice.name : "???";
+    const model = regDevice ? regDevice.model : "";
+    const avertage_rtt = Math.round(
       (parseInt(device.statistics.average_request_rtt) +
         parseInt(device.statistics.average_response_rtt)) /
         2.0
     );
 
-    var res = regDevice
-      ? "<b>" + (regDevice.name_by_user || regDevice.name) + "</b>\n"
-      : "";
-    res += "<b>Model: </b>" + regDevice.model + "\n";
+    var res = "<b>" + name + "</b>\n";
+    res += "<b>Model: </b>" + model + "\n";
     res += "<b>Node: </b>" + device.node_id + "\n";
     res += "<b>RTT: </b>" + avertage_rtt + " | ";
     res +=
@@ -200,7 +195,7 @@ class OZWNetworkVisualizationCard extends HTMLElement {
     return res;
   }
 
-  _fetchNodeStatistics(hass, node) {
+  _ozwFetchNodeStatistics(hass, node) {
     return hass
       .callWS({
         type: "ozw/node_statistics",
@@ -212,7 +207,7 @@ class OZWNetworkVisualizationCard extends HTMLElement {
       });
   }
 
-  _fetchInstanceNodes(hass, instance) {
+  _ozwFetchInstanceNodes(hass, instance) {
     hass
       .callWS({
         type: "ozw/get_nodes",
@@ -221,7 +216,7 @@ class OZWNetworkVisualizationCard extends HTMLElement {
       .then((nodes) => {
         const stats_promises = [];
         nodes.forEach((node) => {
-          stats_promises.push(this._fetchNodeStatistics(hass, node));
+          stats_promises.push(this._ozwFetchNodeStatistics(hass, node));
         });
 
         Promise.all(stats_promises).then((node_stats_list) => {
@@ -231,31 +226,191 @@ class OZWNetworkVisualizationCard extends HTMLElement {
       });
   }
 
-  _updateDeviceRegistry(device_registry) {
-    let node_set = new Set();
+  _getNodeIdFromRegistry(device) {
+    if (ZWAVE_INTEGRATION === "zwave2mqtt") {
+      const regIdentifiers = device.identifiers.find(
+        (identifier) =>
+          identifier[0] === "mqtt" && identifier[1].includes("zwave2mqtt")
+      );
+      if (!regIdentifiers) {
+        return null;
+      }
 
-    device_registry.forEach((device) => {
-      const ozwIdentifier = device.identifiers.find(
+      const identifiers = regIdentifiers[1].split("_");
+      const z2m_instance = 0;
+      const node_id = identifiers[2].replace("node", "");
+
+      return [z2m_instance, node_id];
+    } else {
+      const regIdentifiers = device.identifiers.find(
         (identifier) => identifier[0] === "ozw"
       );
-      if (!ozwIdentifier) {
-        return;
+      if (!regIdentifiers) {
+        return null;
       }
-      const identifiers = ozwIdentifier[1].split(".");
+
+      const identifiers = regIdentifiers[1].split(".");
       const ozw_instance = identifiers[0];
       const node_id = identifiers[1];
 
-      const instante_node_id = ozw_instance + "." + node_id;
-      if (node_set.has(instante_node_id)) {
+      return [ozw_instance, node_id];
+    }
+  }
+
+  _updateDeviceRegistry(device_registry) {
+    let node_set = new Set();
+    device_registry.forEach((device) => {
+      //const [zw_instance, node_id] = this._getNodeIdFromRegistry(device);
+      const instance_node_id = this._getNodeIdFromRegistry(device);
+      if (!instance_node_id) {
         return;
       }
-      node_set.add(instante_node_id);
-
-      if (this.device_registry[ozw_instance] === undefined) {
-        this.device_registry[ozw_instance] = {};
+      const zw_instance = instance_node_id[0];
+      const node_id = instance_node_id[1];
+      const instance_node_id_str = zw_instance + "." + node_id;
+      if (node_set.has(instance_node_id_str)) {
+        return;
       }
-      this.device_registry[ozw_instance][node_id] = device;
+      node_set.add(instance_node_id_str);
+
+      if (this.device_registry[zw_instance] === undefined) {
+        this.device_registry[zw_instance] = {};
+      }
+      this.device_registry[zw_instance][node_id] = device;
     });
+  }
+
+  _loadOzw(hass) {
+    hass
+      .callWS({
+        type: "ozw/get_instances",
+      })
+      .then((instances) => {
+        instances.forEach((instance) => {
+          // TODO: fix multi instance. ATM the last instance will win.
+          this._ozwFetchInstanceNodes(hass, instance.ozw_instance);
+        });
+      })
+      .catch((error) => {
+        console.warn("Failed to get instances: ", error.message);
+      });
+  }
+
+  _loadZ2m(hass) {
+    class Deferred {
+      constructor() {
+        var self = this;
+        this.promise = new Promise(function (resolve, reject) {
+          self.reject = reject;
+          self.resolve = resolve;
+        });
+      }
+    }
+
+    class Z2MStatsReceiver {
+      constructor() {
+        this.stats_dfd = new Deferred();
+        this.node_ids = [];
+        this.node_stats = {};
+
+        var self = this;
+        hass.connection.subscribeMessage(
+          (message) => {
+            if (!self.node_ids) return;
+            if (!message.payload) return;
+
+            const payload = JSON.parse(message.payload);
+            const node_id = payload.args[0];
+
+            const index = self.node_ids.indexOf(node_id);
+            if (index < 0) return;
+            self.node_ids.splice(index, 1);
+            self.node_stats[node_id] = payload.result;
+
+            if (self.node_ids.length == 0) {
+              self.stats_dfd.resolve(self.node_stats);
+            }
+          },
+          {
+            type: "mqtt/subscribe",
+            topic: "z2m/_CLIENTS/ZWAVE_GATEWAY-HA/api/getNodeStatistics",
+          }
+        );
+      }
+
+      start(node_ids) {
+        this.node_ids.push(...node_ids);
+        this.node_stats = {};
+        node_ids.forEach((id) => {
+          hass.callService("mqtt", "publish", {
+            topic: "z2m/_CLIENTS/ZWAVE_GATEWAY-HA/api/getNodeStatistics/set",
+            payload: `{ "args": [${id}] }`,
+          });
+        });
+        return this.stats_dfd.promise;
+      }
+    }
+
+    hass.callService("mqtt", "publish", {
+      topic: "z2m/_CLIENTS/ZWAVE_GATEWAY-HA/api/refreshNeighborns/set",
+    });
+
+    var stats_receiver = new Z2MStatsReceiver();
+
+    const neighbors_cb = (message) => {
+      if (!message.payload) return;
+      const neighbors_array = JSON.parse(message.payload).result;
+
+      const nodes = [];
+      neighbors_array.forEach((neighbors, index) => {
+        if (!neighbors) {
+          return;
+        }
+        nodes.push({
+          ozw_instance: 0,
+          node_id: index,
+          neighbors: neighbors,
+          statistics: {
+            average_request_rtt: 0,
+            average_response_rtt: 0,
+          },
+          is_routing: true,
+          is_awake: true,
+          is_beaming: true,
+          is_failed: false,
+          node_basic_string:
+            index === 1 ? "Static Controller" : "Routing Slave",
+        });
+      });
+
+      stats_receiver
+        .start(
+          nodes.map((node) => {
+            return node.node_id;
+          })
+        )
+        .then((stats) => {
+          console.log(stats);
+          nodes.forEach((node) => {
+            if (!node.node_id in stats) return;
+            const node_stats = stats[node.node_id];
+            node.statistics.average_request_rtt = node_stats.averageRequestRTT;
+            node.statistics.average_response_rtt =
+              node_stats.averageResponseRTT;
+            node.statistics.send_count = node_stats.sentCnt;
+            node.statistics.sent_failed = node_stats.sentFailed;
+          });
+          this._updateContent({ devices: nodes });
+        });
+    };
+
+    // wait a bit to avoid getting an old refreshNeighborns topic
+    setTimeout(() => {
+      hass.connection.subscribeMessage(neighbors_cb, {
+        type: "mqtt/subscribe",
+        topic: "z2m/_CLIENTS/ZWAVE_GATEWAY-HA/api/refreshNeighborns/#",
+      });
+    }, 100);
   }
 
   set hass(hass) {
@@ -265,7 +420,6 @@ class OZWNetworkVisualizationCard extends HTMLElement {
     ) {
       return;
     }
-    let nodes = [];
 
     hass
       .callWS({
@@ -274,19 +428,11 @@ class OZWNetworkVisualizationCard extends HTMLElement {
       .then((device_registry) => {
         this._updateDeviceRegistry(device_registry);
 
-        hass
-          .callWS({
-            type: "ozw/get_instances",
-          })
-          .then((instances) => {
-            instances.forEach((instance) => {
-              // TODO: fix multi instance. ATM the last instance will win.
-              this._fetchInstanceNodes(hass, instance.ozw_instance);
-            });
-          })
-          .catch((error) => {
-            console.warn("Failed to get instances: ", error.message);
-          });
+        if (ZWAVE_INTEGRATION === "zwave2mqtt") {
+          this._loadZ2m(hass);
+        } else {
+          this._loadOzw(hass);
+        }
       });
 
     this.lastUpdated = Date.now();
