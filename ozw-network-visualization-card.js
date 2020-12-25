@@ -8,9 +8,6 @@ function loadCSS(url) {
   document.head.appendChild(link);
 }
 
-const ZWAVE_INTEGRATION = "ozw";
-//const ZWAVE_INTEGRATION = "zwave2mqtt"
-
 class OZWNetworkVisualizationCard extends HTMLElement {
   constructor() {
     super();
@@ -52,6 +49,11 @@ class OZWNetworkVisualizationCard extends HTMLElement {
     if (root.lastChild) root.removeChild(root.lastChild);
 
     this._config = Object.assign({}, config);
+    if (!this._config.integration) {
+      this._config.integration = "ozw";
+    }
+
+    console.log("Loading for integration: ", this._config.integration);
 
     // assemble html
     const card = document.createElement("ha-card");
@@ -227,7 +229,7 @@ class OZWNetworkVisualizationCard extends HTMLElement {
   }
 
   _getNodeIdFromRegistry(device) {
-    if (ZWAVE_INTEGRATION === "zwave2mqtt") {
+    if (this._config.integration === "zwave2mqtt") {
       const regIdentifiers = device.identifiers.find(
         (identifier) =>
           identifier[0] === "mqtt" && identifier[1].includes("zwave2mqtt")
@@ -428,7 +430,7 @@ class OZWNetworkVisualizationCard extends HTMLElement {
       .then((device_registry) => {
         this._updateDeviceRegistry(device_registry);
 
-        if (ZWAVE_INTEGRATION === "zwave2mqtt") {
+        if (this._config.integration === "zwave2mqtt") {
           this._loadZ2m(hass);
         } else {
           this._loadOzw(hass);
