@@ -187,10 +187,15 @@ class OZWNetworkVisualizationCard extends HTMLElement {
       device.statistics.sent_failed +
       " failed)" +
       "\n";
-    res += (device.is_routing ? "Routing" : "Not routing") + " | ";
-    res += (device.is_awake ? "Awake" : "Sleeping") + " | ";
-    res += (device.is_beaming ? "Beaming" : "Not beaming") + "";
-
+    if ("is_routing" in device) {
+      res += (device.is_routing ? "Routing" : "Not routing") + " | ";
+    }
+    if ("is_awake" in device) {
+      res += (device.is_awake ? "Awake" : "Sleeping") + " | ";
+    }
+    if ("is_beaming" in device) {
+      res += (device.is_beaming ? "Beaming" : "Not beaming") + "";
+    }
     if (device.is_failed) {
       res += "\n<b>DEVICE FAILED</b>";
     }
@@ -373,13 +378,9 @@ class OZWNetworkVisualizationCard extends HTMLElement {
           node_id: index,
           neighbors: neighbors,
           statistics: {
-            average_request_rtt: 0,
-            average_response_rtt: 0,
+            average_request_rtt: 999999,
+            average_response_rtt: 999999,
           },
-          is_routing: true,
-          is_awake: true,
-          is_beaming: true,
-          is_failed: false,
           node_basic_string:
             index === 1 ? "Static Controller" : "Routing Slave",
         });
