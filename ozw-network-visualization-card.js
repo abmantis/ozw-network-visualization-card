@@ -138,7 +138,9 @@ class OZWNetworkVisualizationCard extends HTMLElement {
         2.0
     );
 
-    if (avertage_rtt > 1000) {
+    if (avertage_rtt === 0) {
+      return "#ababab";
+    } else if (avertage_rtt > 1000) {
       return "#ab0000";
     } else if (avertage_rtt > 500) {
       return "#e6b402";
