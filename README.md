@@ -4,12 +4,11 @@ Home Assistant custom card for visualizing the ZWave network.
 
 This card works with the following integrations:
 
-- [OpenZWave (beta)](https://www.home-assistant.io/integrations/ozw).
 - [ZWave2MQTT](https://github.com/OpenZWave/Zwave2Mqtt).
 
 ZWave network mapping can help you identify weak points in the network like isolated devices or troublesome areas of the mesh network.
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg?style=for-the-badge)](https://github.com/custom-components/hacs)
+[![hacs_badge](https://img.shields.io/badge/HACS-Default-orange.svg?style=for-the-badge)](https://github.com/hacs/integration)
 
 # Screenshots
 
